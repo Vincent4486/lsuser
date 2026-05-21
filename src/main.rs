@@ -24,7 +24,7 @@ struct Args {
         short,
         long,
         value_name = "LIST",
-        help = "Specify which output columns to print (comma-separated). Available: USER,UID,GID,GROUP,GROUPS,REAL_NAME,HOME,SHELL."
+        help = "Specify which output columns to print (comma-separated). Available: USER,UID,GID,PRIMARY_GROUP,ALL_GROUP,REAL_NAME,HOME,SHELL."
     )]
     output: Option<String>,
 
@@ -43,7 +43,7 @@ struct Args {
     #[arg(long, value_name = "NAME", help = "Filter by group name.")]
     group: Option<String>,
 
-    #[arg(long, help = "Display all group memberships in a GROUPS column.")]
+    #[arg(long, help = "Display all group memberships in an ALL_GROUP column.")]
     groups: bool,
 }
 
@@ -292,8 +292,8 @@ fn print_table(users: &[UserInfo], columns: &[&str], no_headings: bool) {
                 "USER" => user.user.len(),
                 "UID" => user.uid.len(),
                 "GID" => user.gid.len(),
-                "GROUP" => user.group.len(),
-                "GROUPS" => user.groups.len(),
+                "PRIMARY_GROUP" => user.group.len(),
+                "ALL_GROUP" => user.groups.len(),
                 "REAL_NAME" => user.real_name.len(),
                 "HOME" => user.home.len(),
                 "SHELL" => user.shell.len(),
@@ -324,8 +324,8 @@ fn print_table(users: &[UserInfo], columns: &[&str], no_headings: bool) {
                     "USER" => &user.user,
                     "UID" => &user.uid,
                     "GID" => &user.gid,
-                    "GROUP" => &user.group,
-                    "GROUPS" => &user.groups,
+                    "PRIMARY_GROUP" => &user.group,
+                    "ALL_GROUP" => &user.groups,
                     "REAL_NAME" => &user.real_name,
                     "HOME" => &user.home,
                     "SHELL" => &user.shell,
@@ -377,7 +377,16 @@ fn main() {
         true
     }).collect();
 
-    let all_available = vec!["USER", "UID", "GID", "GROUP", "GROUPS", "REAL_NAME", "HOME", "SHELL"];
+    let all_available = vec![
+        "USER",
+        "UID",
+        "GID",
+        "PRIMARY_GROUP",
+        "ALL_GROUP",
+        "REAL_NAME",
+        "HOME",
+        "SHELL",
+    ];
     let default_columns = vec!["USER", "UID", "HOME", "SHELL"];
 
     let custom_cols;
@@ -398,11 +407,11 @@ fn main() {
         default_columns
     };
 
-    if args.groups && !active_columns.contains(&"GROUPS") {
-        active_columns.push("GROUPS");
+    if args.groups && !active_columns.contains(&"ALL_GROUP") {
+        active_columns.push("ALL_GROUP");
     }
 
-    if active_columns.iter().any(|col| *col == "GROUPS") {
+    if active_columns.iter().any(|col| *col == "ALL_GROUP") {
         for user in &mut users {
             let gid: u32 = user.gid.parse().unwrap_or(0);
             user.groups = group_names_for_user(&user.user, gid);
@@ -418,8 +427,8 @@ fn main() {
                     "USER" => user.user.clone(),
                     "UID" => user.uid.clone(),
                     "GID" => user.gid.clone(),
-                    "GROUP" => user.group.clone(),
-                    "GROUPS" => user.groups.clone(),
+                    "PRIMARY_GROUP" => user.group.clone(),
+                    "ALL_GROUP" => user.groups.clone(),
                     "REAL_NAME" => user.real_name.clone(),
                     "HOME" => user.home.clone(),
                     "SHELL" => user.shell.clone(),
