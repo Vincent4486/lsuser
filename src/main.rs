@@ -20,7 +20,12 @@ struct Args {
     #[arg(short, long, help = "Do not print a header line.")]
     noheadings: bool,
 
-    #[arg(short, long, value_name = "LIST", help = "Specify which output columns to print (comma-separated).")]
+    #[arg(
+        short,
+        long,
+        value_name = "LIST",
+        help = "Specify which output columns to print (comma-separated). Available: USER,UID,GID,GROUP,GROUPS,REAL_NAME,HOME,SHELL."
+    )]
     output: Option<String>,
 
     #[arg(short = 'O', long, help = "Output all available columns.")]
