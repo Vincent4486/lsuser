@@ -44,6 +44,7 @@ struct UserInfo {
     user: String,
     uid: String,
     gid: String,
+    group: String,
     real_name: String,
     home: String,
     shell: String,
@@ -93,6 +94,117 @@ fn gid_for_group(name: &str) -> Option<u32> {
     }
 }
 
+fn group_name_for_gid(gid: u32) -> Option<String> {
+    unsafe {
+        let grp = libc::getgrgid(gid as libc::gid_t);
+        if grp.is_null() {
+            None
+        } else {
+            Some(safe_string((*grp).gr_name))
+        }
+    }
+}
+
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+fn user_in_group(user: &str, primary_gid: u32, target_gid: u32) -> bool {
+    if primary_gid == target_gid {
+        return true;
+    }
+
+    let c_user = match CString::new(user) {
+        Ok(val) => val,
+        Err(_) => return false,
+    };
+
+    let mut size: libc::c_int = 16;
+    loop {
+        let mut groups = vec![0 as libc::c_int; size as usize];
+        let mut ngroups = size;
+        let ret = unsafe {
+            libc::getgrouplist(
+                c_user.as_ptr(),
+                primary_gid as libc::c_int,
+                groups.as_mut_ptr(),
+                &mut ngroups,
+            )
+        };
+
+        if ret >= 0 {
+            return groups
+                .iter()
+                .take(ngroups as usize)
+                .any(|gid| *gid as u32 == target_gid);
+        }
+
+        if ngroups > size {
+            size = ngroups;
+        } else {
+            size = size.saturating_mul(2);
+        }
+
+        if size <= 0 || size > 4096 {
+            return false;
+        }
+    }
+}
+
+#[cfg(not(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+)))]
+fn user_in_group(user: &str, primary_gid: u32, target_gid: u32) -> bool {
+    if primary_gid == target_gid {
+        return true;
+    }
+
+    let c_user = match CString::new(user) {
+        Ok(val) => val,
+        Err(_) => return false,
+    };
+
+    let mut size: libc::c_int = 16;
+    loop {
+        let mut groups = vec![0 as libc::gid_t; size as usize];
+        let mut ngroups = size;
+        let ret = unsafe {
+            libc::getgrouplist(
+                c_user.as_ptr(),
+                primary_gid as libc::gid_t,
+                groups.as_mut_ptr(),
+                &mut ngroups,
+            )
+        };
+
+        if ret >= 0 {
+            return groups
+                .iter()
+                .take(ngroups as usize)
+                .any(|gid| *gid as u32 == target_gid);
+        }
+
+        if ngroups > size {
+            size = ngroups;
+        } else {
+            size = size.saturating_mul(2);
+        }
+
+        if size <= 0 || size > 4096 {
+            return false;
+        }
+    }
+}
+
 fn get_users(show_all: bool) -> Vec<UserInfo> {
     let mut users = Vec::new();
     let target_os = std::env::consts::OS;
@@ -108,6 +220,7 @@ fn get_users(show_all: bool) -> Vec<UserInfo> {
             let name = safe_string((*pwd).pw_name);
             let uid = (*pwd).pw_uid;
             let gid = (*pwd).pw_gid;
+            let group = group_name_for_gid(gid).unwrap_or_else(|| "N/A".to_string());
             let gecos = safe_string((*pwd).pw_gecos);
             let real_name = gecos.split(',').next().unwrap_or("").to_string();
             let home = safe_string((*pwd).pw_dir);
@@ -129,6 +242,7 @@ fn get_users(show_all: bool) -> Vec<UserInfo> {
                 user: name,
                 uid: uid.to_string(),
                 gid: gid.to_string(),
+                group,
                 real_name: if real_name.is_empty() { "N/A".to_string() } else { real_name },
                 home,
                 shell,
@@ -157,6 +271,7 @@ fn print_table(users: &[UserInfo], columns: &[&str], no_headings: bool) {
                 "USER" => user.user.len(),
                 "UID" => user.uid.len(),
                 "GID" => user.gid.len(),
+                "GROUP" => user.group.len(),
                 "REAL_NAME" => user.real_name.len(),
                 "HOME" => user.home.len(),
                 "SHELL" => user.shell.len(),
@@ -187,6 +302,7 @@ fn print_table(users: &[UserInfo], columns: &[&str], no_headings: bool) {
                     "USER" => &user.user,
                     "UID" => &user.uid,
                     "GID" => &user.gid,
+                    "GROUP" => &user.group,
                     "REAL_NAME" => &user.real_name,
                     "HOME" => &user.home,
                     "SHELL" => &user.shell,
@@ -204,6 +320,18 @@ fn main() {
     let args = Args::parse();
     let users = get_users(args.all);
 
+    let target_gid = if let Some(ref group_name) = args.group {
+        match gid_for_group(group_name) {
+            Some(gid) => Some(gid),
+            None => {
+                eprintln!("error: group '{group_name}' does not exist");
+                std::process::exit(1);
+            }
+        }
+    } else {
+        None
+    };
+
     let users: Vec<UserInfo> = users.into_iter().filter(|u| {
         if let Some(ref uid_range) = args.uid {
             let (min, max) = parse_range(uid_range);
@@ -217,22 +345,16 @@ fn main() {
             if let Some(lo) = min { if gid < lo { return false; } }
             if let Some(hi) = max { if gid > hi { return false; } }
         }
-        if let Some(ref group_name) = args.group {
-            match gid_for_group(group_name) {
-                Some(target_gid) => {
-                    let gid: u32 = u.gid.parse().unwrap_or(0);
-                    if gid != target_gid { return false; }
-                }
-                None => {
-                    eprintln!("error: group '{group_name}' does not exist");
-                    std::process::exit(1);
-                }
+        if let Some(target_gid) = target_gid {
+            let gid: u32 = u.gid.parse().unwrap_or(0);
+            if !user_in_group(&u.user, gid, target_gid) {
+                return false;
             }
         }
         true
     }).collect();
 
-    let all_available = vec!["USER", "UID", "GID", "REAL_NAME", "HOME", "SHELL"];
+    let all_available = vec!["USER", "UID", "GID", "GROUP", "REAL_NAME", "HOME", "SHELL"];
     let default_columns = vec!["USER", "UID", "HOME", "SHELL"];
 
     let custom_cols;
@@ -262,6 +384,7 @@ fn main() {
                     "USER" => user.user.clone(),
                     "UID" => user.uid.clone(),
                     "GID" => user.gid.clone(),
+                    "GROUP" => user.group.clone(),
                     "REAL_NAME" => user.real_name.clone(),
                     "HOME" => user.home.clone(),
                     "SHELL" => user.shell.clone(),
