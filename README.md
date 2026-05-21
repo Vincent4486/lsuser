@@ -50,3 +50,18 @@ lsuser -a                  # include system accounts
 lsuser -o USER,UID,REAL_NAME  # custom columns
 lsuser -O -J               # all columns as JSON
 ```
+
+## Release
+
+CI and releases are automated through one GitHub Actions workflow that runs only for version tags.
+
+1. Add a crates.io token as the repository secret `CARGO_REGISTRY_TOKEN`.
+2. Bump the version in `Cargo.toml`.
+3. Create and push a matching version tag:
+
+```sh
+git tag v0.4.3
+git push origin v0.4.3
+```
+
+When a version tag is pushed, the workflow validates formatting, clippy, tests, and crate packaging, builds macOS and Linux binaries, then publishes to crates.io and creates a GitHub Release in parallel.

@@ -14,7 +14,11 @@ use std::os::raw::c_char;
     help_template = "Usage:\n    {usage}\n\nOptions:\n{options}"
 )]
 struct Args {
-    #[arg(short, long, help = "Disable built-in filters and list all system daemon accounts.")]
+    #[arg(
+        short,
+        long,
+        help = "Disable built-in filters and list all system daemon accounts."
+    )]
     all: bool,
 
     #[arg(short, long, help = "Do not print a header line.")]
@@ -34,10 +38,19 @@ struct Args {
     #[arg(short = 'J', long, help = "Use JSON output format.")]
     json: bool,
 
-    #[arg(long, value_name = "RANGE", help = "Filter by UID range (e.g. 0, 0-1000, 1000-).")]
+    #[arg(
+        long,
+        value_name = "RANGE",
+        help = "Filter by UID range (e.g. 0, 0-1000, 1000-)."
+    )]
     uid: Option<String>,
 
-    #[arg(short = 'g', long, value_name = "RANGE", help = "Filter by GID range (e.g. 0, 0-1000, 1000-).")]
+    #[arg(
+        short = 'g',
+        long,
+        value_name = "RANGE",
+        help = "Filter by GID range (e.g. 0, 0-1000, 1000-)."
+    )]
     gid: Option<String>,
 
     #[arg(long, value_name = "NAME", help = "Filter by group name.")]
@@ -77,16 +90,26 @@ fn parse_range(s: &str) -> (Option<u32>, Option<u32>) {
         let min = if left.is_empty() {
             None
         } else {
-            Some(left.parse().unwrap_or_else(|_| err(&format!("invalid number '{left}'"))))
+            Some(
+                left.parse()
+                    .unwrap_or_else(|_| err(&format!("invalid number '{left}'"))),
+            )
         };
         let max = if right.is_empty() {
             None
         } else {
-            Some(right.parse().unwrap_or_else(|_| err(&format!("invalid number '{right}'"))))
+            Some(
+                right
+                    .parse()
+                    .unwrap_or_else(|_| err(&format!("invalid number '{right}'"))),
+            )
         };
         (min, max)
     } else {
-        let val = s.trim().parse().unwrap_or_else(|_| err(&format!("invalid value '{s}'")));
+        let val = s
+            .trim()
+            .parse()
+            .unwrap_or_else(|_| err(&format!("invalid value '{s}'")));
         (Some(val), Some(val))
     }
 }
@@ -222,7 +245,7 @@ fn user_in_group(user: &str, primary_gid: u32, target_gid: u32) -> bool {
     }
 
     group_ids_for_user(user, primary_gid)
-        .map_or(false, |gids| gids.into_iter().any(|gid| gid == target_gid))
+        .is_some_and(|gids| gids.into_iter().any(|gid| gid == target_gid))
 }
 
 fn get_users(show_all: bool) -> Vec<UserInfo> {
@@ -264,7 +287,11 @@ fn get_users(show_all: bool) -> Vec<UserInfo> {
                 gid: gid.to_string(),
                 group,
                 groups: String::new(),
-                real_name: if real_name.is_empty() { "N/A".to_string() } else { real_name },
+                real_name: if real_name.is_empty() {
+                    "N/A".to_string()
+                } else {
+                    real_name
+                },
                 home,
                 shell,
             });
@@ -355,27 +382,46 @@ fn main() {
         None
     };
 
-    let mut users: Vec<UserInfo> = users.into_iter().filter(|u| {
-        if let Some(ref uid_range) = args.uid {
-            let (min, max) = parse_range(uid_range);
-            let uid: u32 = u.uid.parse().unwrap_or(0);
-            if let Some(lo) = min { if uid < lo { return false; } }
-            if let Some(hi) = max { if uid > hi { return false; } }
-        }
-        if let Some(ref gid_range) = args.gid {
-            let (min, max) = parse_range(gid_range);
-            let gid: u32 = u.gid.parse().unwrap_or(0);
-            if let Some(lo) = min { if gid < lo { return false; } }
-            if let Some(hi) = max { if gid > hi { return false; } }
-        }
-        if let Some(target_gid) = target_gid {
-            let gid: u32 = u.gid.parse().unwrap_or(0);
-            if !user_in_group(&u.user, gid, target_gid) {
-                return false;
+    let mut users: Vec<UserInfo> = users
+        .into_iter()
+        .filter(|u| {
+            if let Some(ref uid_range) = args.uid {
+                let (min, max) = parse_range(uid_range);
+                let uid: u32 = u.uid.parse().unwrap_or(0);
+                if let Some(lo) = min {
+                    if uid < lo {
+                        return false;
+                    }
+                }
+                if let Some(hi) = max {
+                    if uid > hi {
+                        return false;
+                    }
+                }
             }
-        }
-        true
-    }).collect();
+            if let Some(ref gid_range) = args.gid {
+                let (min, max) = parse_range(gid_range);
+                let gid: u32 = u.gid.parse().unwrap_or(0);
+                if let Some(lo) = min {
+                    if gid < lo {
+                        return false;
+                    }
+                }
+                if let Some(hi) = max {
+                    if gid > hi {
+                        return false;
+                    }
+                }
+            }
+            if let Some(target_gid) = target_gid {
+                let gid: u32 = u.gid.parse().unwrap_or(0);
+                if !user_in_group(&u.user, gid, target_gid) {
+                    return false;
+                }
+            }
+            true
+        })
+        .collect();
 
     let all_available = vec![
         "USER",
@@ -393,16 +439,22 @@ fn main() {
     let mut active_columns: Vec<&str> = if args.output_all {
         all_available.clone()
     } else if let Some(ref o) = args.output {
-        custom_cols = o.split(',')
+        custom_cols = o
+            .split(',')
             .map(|s| s.trim().to_uppercase())
             .collect::<Vec<String>>();
-        
-        let filtered: Vec<&str> = custom_cols.iter()
+
+        let filtered: Vec<&str> = custom_cols
+            .iter()
             .map(|s| s.as_str())
             .filter(|s| all_available.contains(s))
             .collect();
-            
-        if filtered.is_empty() { default_columns } else { filtered }
+
+        if filtered.is_empty() {
+            default_columns
+        } else {
+            filtered
+        }
     } else {
         default_columns
     };
@@ -411,7 +463,7 @@ fn main() {
         active_columns.push("ALL_GROUP");
     }
 
-    if active_columns.iter().any(|col| *col == "ALL_GROUP") {
+    if active_columns.contains(&"ALL_GROUP") {
         for user in &mut users {
             let gid: u32 = user.gid.parse().unwrap_or(0);
             user.groups = group_names_for_user(&user.user, gid);
@@ -438,7 +490,7 @@ fn main() {
             }
             json_users.push(serde_json::Value::Object(map));
         }
-        
+
         let wrapper = serde_json::json!({ "users": json_users });
         println!("{}", serde_json::to_string_pretty(&wrapper).unwrap());
         return;
