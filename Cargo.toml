@@ -1,7 +1,13 @@
 [package]
 name = "lsuser"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
+description = "List system users in a clean, columnar layout using raw POSIX libc calls."
+license = "BSD-3-Clause"
+readme = "README.md"
+repository = "https://github.com/Vincent4486/lsuser"
+keywords = ["cli", "sysadmin", "macos", "linux", "libc"]
+categories = ["command-line-utilities", "system-administration"]
 
 [dependencies]
 clap = { version = "4.4", features = ["derive"] }
