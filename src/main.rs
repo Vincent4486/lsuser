@@ -2,6 +2,7 @@ use clap::Parser;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::ffi::CStr;
+use std::ffi::CString;
 use std::os::raw::c_char;
 
 #[derive(Parser, Debug)]
@@ -27,6 +28,15 @@ struct Args {
 
     #[arg(short = 'J', long, help = "Use JSON output format.")]
     json: bool,
+
+    #[arg(long, value_name = "RANGE", help = "Filter by UID range (e.g. 0, 0-1000, 1000-).")]
+    uid: Option<String>,
+
+    #[arg(short = 'g', long, value_name = "RANGE", help = "Filter by GID range (e.g. 0, 0-1000, 1000-).")]
+    gid: Option<String>,
+
+    #[arg(long, value_name = "NAME", help = "Filter by group name.")]
+    group: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -44,6 +54,43 @@ fn safe_string(ptr: *mut c_char) -> String {
         return String::new();
     }
     unsafe { CStr::from_ptr(ptr).to_string_lossy().into_owned() }
+}
+
+fn parse_range(s: &str) -> (Option<u32>, Option<u32>) {
+    let err = |msg: &str| -> ! {
+        eprintln!("error: {msg}");
+        std::process::exit(1);
+    };
+    if let Some(pos) = s.find('-') {
+        let left = s[..pos].trim();
+        let right = s[pos + 1..].trim();
+        let min = if left.is_empty() {
+            None
+        } else {
+            Some(left.parse().unwrap_or_else(|_| err(&format!("invalid number '{left}'"))))
+        };
+        let max = if right.is_empty() {
+            None
+        } else {
+            Some(right.parse().unwrap_or_else(|_| err(&format!("invalid number '{right}'"))))
+        };
+        (min, max)
+    } else {
+        let val = s.trim().parse().unwrap_or_else(|_| err(&format!("invalid value '{s}'")));
+        (Some(val), Some(val))
+    }
+}
+
+fn gid_for_group(name: &str) -> Option<u32> {
+    let c_name = CString::new(name).ok()?;
+    unsafe {
+        let grp = libc::getgrnam(c_name.as_ptr());
+        if grp.is_null() {
+            None
+        } else {
+            Some((*grp).gr_gid)
+        }
+    }
 }
 
 fn get_users(show_all: bool) -> Vec<UserInfo> {
@@ -154,6 +201,34 @@ fn print_table(users: &[UserInfo], columns: &[&str], no_headings: bool) {
 fn main() {
     let args = Args::parse();
     let users = get_users(args.all);
+
+    let users: Vec<UserInfo> = users.into_iter().filter(|u| {
+        if let Some(ref uid_range) = args.uid {
+            let (min, max) = parse_range(uid_range);
+            let uid: u32 = u.uid.parse().unwrap_or(0);
+            if let Some(lo) = min { if uid < lo { return false; } }
+            if let Some(hi) = max { if uid > hi { return false; } }
+        }
+        if let Some(ref gid_range) = args.gid {
+            let (min, max) = parse_range(gid_range);
+            let gid: u32 = u.gid.parse().unwrap_or(0);
+            if let Some(lo) = min { if gid < lo { return false; } }
+            if let Some(hi) = max { if gid > hi { return false; } }
+        }
+        if let Some(ref group_name) = args.group {
+            match gid_for_group(group_name) {
+                Some(target_gid) => {
+                    let gid: u32 = u.gid.parse().unwrap_or(0);
+                    if gid != target_gid { return false; }
+                }
+                None => {
+                    eprintln!("error: group '{group_name}' does not exist");
+                    std::process::exit(1);
+                }
+            }
+        }
+        true
+    }).collect();
 
     let all_available = vec!["USER", "UID", "GID", "REAL_NAME", "HOME", "SHELL"];
     let default_columns = vec!["USER", "UID", "HOME", "SHELL"];
