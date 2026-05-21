@@ -8,7 +8,7 @@ use std::os::raw::c_char;
 #[derive(Parser, Debug)]
 #[command(
     name = "lsuser",
-    author,
+    author = "Vincent Yang",
     version,
     about = "List system users in a clean, block-device-like columnar layout.",
     help_template = "Usage:\n    {usage}\n\nOptions:\n{options}"
@@ -114,7 +114,9 @@ fn get_users(show_all: bool) -> Vec<UserInfo> {
             let shell = safe_string((*pwd).pw_shell);
 
             let is_system = if target_os == "macos" {
-                name.starts_with('_') || uid < 500
+                name.starts_with('_') || uid < 501
+            } else if target_os.ends_with("bsd") || target_os == "dragonfly" {
+                uid < 1001 || uid == 65534
             } else {
                 uid < 1000 || uid == 65534
             };
