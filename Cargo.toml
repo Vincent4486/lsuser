@@ -1,6 +1,6 @@
 [package]
 name = "lsuser"
-version = "0.4.4"
+version = "0.4.5"
 edition = "2021"
 description = "List system users in a clean, columnar layout using raw POSIX libc calls."
 license = "BSD-3-Clause"
