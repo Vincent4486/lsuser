@@ -114,6 +114,10 @@ fn group_name_for_gid(gid: u32) -> Option<String> {
     }
 }
 
+fn cached_group_name(gid: u32, cache: &mut HashMap<u32, Option<String>>) -> Option<String> {
+    cache.entry(gid).or_insert_with(|| group_name_for_gid(gid)).clone()
+}
+
 #[cfg(not(any(
     target_os = "macos",
     target_os = "ios",
@@ -204,14 +208,14 @@ fn group_ids_for_user(user: &str, primary_gid: u32) -> Option<Vec<u32>> {
     }
 }
 
-fn group_names_for_user(user: &str, primary_gid: u32) -> String {
+fn group_names_for_user(user: &str, primary_gid: u32, cache: &mut HashMap<u32, Option<String>>) -> String {
     let gids = group_ids_for_user(user, primary_gid).unwrap_or_else(|| vec![primary_gid]);
     if gids.is_empty() {
         return "N/A".to_string();
     }
 
     gids.into_iter()
-        .map(|gid| group_name_for_gid(gid).unwrap_or_else(|| gid.to_string()))
+        .map(|gid| cached_group_name(gid, cache).unwrap_or_else(|| gid.to_string()))
         .collect::<Vec<String>>()
         .join(",")
 }
@@ -225,7 +229,7 @@ fn user_in_group(user: &str, primary_gid: u32, target_gid: u32) -> bool {
         .map_or(false, |gids| gids.into_iter().any(|gid| gid == target_gid))
 }
 
-fn get_users(show_all: bool) -> Vec<UserInfo> {
+fn get_users(show_all: bool, cache: &mut HashMap<u32, Option<String>>) -> Vec<UserInfo> {
     let mut users = Vec::new();
     let target_os = std::env::consts::OS;
 
@@ -240,7 +244,7 @@ fn get_users(show_all: bool) -> Vec<UserInfo> {
             let name = safe_string((*pwd).pw_name);
             let uid = (*pwd).pw_uid;
             let gid = (*pwd).pw_gid;
-            let group = group_name_for_gid(gid).unwrap_or_else(|| "N/A".to_string());
+            let group = cached_group_name(gid, cache).unwrap_or_else(|| "N/A".to_string());
             let gecos = safe_string((*pwd).pw_gecos);
             let real_name = gecos.split(',').next().unwrap_or("").to_string();
             let home = safe_string((*pwd).pw_dir);
@@ -341,7 +345,8 @@ fn print_table(users: &[UserInfo], columns: &[&str], no_headings: bool) {
 
 fn main() {
     let args = Args::parse();
-    let users = get_users(args.all);
+    let mut group_cache = HashMap::new();
+    let users = get_users(args.all, &mut group_cache);
 
     let target_gid = if let Some(ref group_name) = args.group {
         match gid_for_group(group_name) {
@@ -414,7 +419,7 @@ fn main() {
     if active_columns.iter().any(|col| *col == "ALL_GROUP") {
         for user in &mut users {
             let gid: u32 = user.gid.parse().unwrap_or(0);
-            user.groups = group_names_for_user(&user.user, gid);
+            user.groups = group_names_for_user(&user.user, gid, &mut group_cache);
         }
     }
 
