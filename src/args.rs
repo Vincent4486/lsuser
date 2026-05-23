@@ -9,7 +9,7 @@ use clap::Parser;
     help_template = "Usage:\n    {usage}\n\nOptions:\n{options}"
 )]
 pub struct Args {
-    #[arg(short, long, help = "Disable built-in filters and list all system daemon accounts.")]
+    #[arg(short, long, help = "Disable built-in filters and list all users.")]
     pub all: bool,
 
     #[arg(short, long, help = "Do not print a header line.")]

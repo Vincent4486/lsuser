@@ -2,13 +2,13 @@
 
 List system users in a clean, columnar layout.
 
-Most operating systems do not provide a straightforward, consistent API for enumerating local user accounts. `lsuser` solves this by using raw POSIX `libc` calls (`getpwent`/`setpwent`/`endpwent`) to read the password database and present users in a readable table — or structured JSON for scripting.
+Most operating systems do not provide a straightforward, consistent API for enumerating local users. `lsuser` solves this by using raw POSIX `libc` calls (`getpwent`/`setpwent`/`endpwent`) to read the password database and present users in a readable table — or structured JSON for scripting.
 
 ## Features
 
 - **Cross-platform** — Works on macOS, Linux, and other Unix-likes via libc.
-- **Smart defaults** — Filters out system accounts by default (UID < 500 on macOS, UID < 1000 or 65534 on Linux).
-- **Show all accounts** — Use `-a` / `--all` to include system daemon users.
+- **Smart defaults** — Filters out system users by default (UID < 500 on macOS, UID < 1000 or 65534 on Linux).
+- **Show all users** — Use `-a` / `--all` to include system daemon users.
 - **Customizable columns** — Choose which fields to display: `USER`, `UID`, `GID`, `REAL_NAME`, `HOME`, `SHELL`.
 - **JSON output** — Use `-J` / `--json` for machine-readable output.
 - **No external commands** — Does not parse `/etc/passwd` directly or shell out to `dscl`/`getent`.
@@ -36,7 +36,7 @@ lsuser [OPTIONS]
 
 | Flag                    | Description                                    |
 |-------------------------|------------------------------------------------|
-| `-a`, `--all`           | List all users including system accounts       |
+| `-a`, `--all`           | List all users including system users       |
 | `-n`, `--noheadings`    | Omit the header row                            |
 | `-o`, `--output`        | Comma-separated columns (USER,UID,GID,REAL_NAME,HOME,SHELL) |
 | `-O`, `--output-all`    | Show all available columns                     |
@@ -46,7 +46,7 @@ lsuser [OPTIONS]
 
 ```sh
 lsuser                     # list human users (default columns: USER, UID, HOME, SHELL)
-lsuser -a                  # include system accounts
+lsuser -a                  # include system users
 lsuser -o USER,UID,REAL_NAME  # custom columns
 lsuser -O -J               # all columns as JSON
 ```
